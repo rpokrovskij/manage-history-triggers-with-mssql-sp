@@ -146,7 +146,7 @@ BEGIN
 			SET @TableSql = @Comment + @EOL + 'CREATE TABLE ['+@SchemaName+'].[' + @HistoryTableName + '] (' + @EOL
 			IF @CreatePrimaryKey=1
 			BEGIN
-				SET @TableSql = @TableSql + @TAB + '['+@HistoryTableIdentityName + '] [BIGINT]  DEFAULT NEXT VALUE FOR '+@HistorySequenceName +' NOT NULL,' + @EOL
+				SET @TableSql = @TableSql + @TAB + '['+@HistoryTableIdentityName + '] [BIGINT]  DEFAULT NEXT VALUE FOR ['+@SchemaName+'].[' + @HistorySequenceName + '] NOT NULL,' + @EOL
 			END
 			IF @UseDateTime2=1
 				SET @TableSql = @TableSql + @TAB + '['+@HistoryTableSystemColumnPrefix+'RecordedAt]' + @TAB + 'DATETIME2 NOT NULL DEFAULT (SYSDATETIME()),' + @EOL
