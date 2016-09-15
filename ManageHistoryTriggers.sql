@@ -88,8 +88,8 @@ SET @PrimaryKeyDefaultName = '[PK_'+@SchemaName+'.'+@HistoryTableName+']'
 
 IF OBJECT_ID(@SchemaTableName, 'U') IS NULL 
 BEGIN
-	DECLARE @ErrMessage NVARCHAR(MAX) = N'The table ' + @HistorySchemaTableName+' doesn''t exist '
-	RAISERROR (@ErrMessage, 10, 1, @HistorySchemaTableName) WITH SETERROR;
+	DECLARE @ErrMessage NVARCHAR(MAX) = N'The table ' + @SchemaTableName+' doesn''t exist '
+	RAISERROR (@ErrMessage, 10, 1, @SchemaTableName) WITH SETERROR;
 	RETURN; 
 END
 
