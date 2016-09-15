@@ -43,7 +43,7 @@ SELECT * FROM dbo.ManageHistoryTriggersTestTable_History
 
 exec [dbo].[ManageHistoryTriggers] @TableName='ManageHistoryTriggersTestTable', @SchemaName='dbo', @RemoveHistory=1, @ArchiveRemovedData=1
 exec [dbo].[ManageHistoryTriggers] 'ManageHistoryTriggersTestTable', 'dbo', @PrintOnly=0, @CreateTriggers=1, @CreatePrimaryKey=1, @UseDateTime2=0
-exec [dbo].[ManageHistoryTriggers] @TableName='ManageHistoryTriggersTestTable', @SchemaName='dbo',  @PrintOnly=1, @RemoveHistory=1, @ArchiveRemovedData=0
+exec [dbo].[ManageHistoryTriggers] @TableName='ManageHistoryTriggersTestTable', @SchemaName='dbo',  @PrintOnly=0, @RemoveHistory=1, @ArchiveRemovedData=0
 
 DROP TABLE ManageHistoryTriggersTestTable
 */
