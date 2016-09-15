@@ -1,4 +1,4 @@
-﻿/*
+/*
 MIT License
 
 Copyright (c) 2016 Roman Pokrovskij (Github user rpokrovskij)
@@ -54,7 +54,7 @@ exec sp_rename 'ElectrodeRemelts_History' , 'ElectrodeRemelts_History_20150920_1
 
 */
 
-CREATE PROCEDURE [dbo].[ManageHistoryTriggers]
+ALTER PROCEDURE [dbo].[ManageHistoryTriggers]
 @TableName VARCHAR(200),
 @SchemaName VARCHAR(200) = 'dbo',
 @PrintOnly BIT=0,
@@ -87,6 +87,13 @@ SET @Comment = '-- Auto generated using ' + OBJECT_NAME(@@PROCID)+ ' by ' + SUSE
 SET @InsertTriggerName = @TriggerPrefix+'_AI_' + @TableName
 SET @UpdateTriggerName = @TriggerPrefix+'_AU_' + @TableName
 SET @DeleteTriggerName = @TriggerPrefix+'_AD_' + @TableName
+
+IF OBJECT_ID(@SchemaTableName, 'U') IS NULL 
+BEGIN
+	DECLARE @ErrMessage NVARCHAR(MAX) = N'The table ' + @HistorySchemaTableName+' doesn''t exist '
+	RAISERROR (@ErrMessage, 10, 1, @HistorySchemaTableName) WITH SETERROR;
+	RETURN; 
+END
 
 IF @RemoveHistory=1
 BEGIN
@@ -282,5 +289,3 @@ BEGIN
 --	;THROW 50000,'Error creating history table',1
 --END CATCH
 END
-
-
