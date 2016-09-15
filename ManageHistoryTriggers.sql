@@ -48,7 +48,7 @@ exec [dbo].[ManageHistoryTriggers] @TableName='ManageHistoryTriggersTestTable', 
 DROP TABLE ManageHistoryTriggersTestTable
 */
 
-ALTER PROCEDURE [dbo].[ManageHistoryTriggers]
+CREATE PROCEDURE [dbo].[ManageHistoryTriggers]
 @TableName VARCHAR(200),
 @SchemaName VARCHAR(200) = 'dbo',
 @PrintOnly BIT=0,
