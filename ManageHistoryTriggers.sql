@@ -282,7 +282,7 @@ BEGIN
 		
 		SET @AiTriggerSql = @AiTriggerSql + 'AS' + @EOL 
 		SET @AiTriggerSql = @AiTriggerSql + 'SET NOCOUNT ON;' + @EOL
-		SET @AiTriggerSql = @AiTriggerSql + 'INSERT [dbo].[' + @HistoryTableName + ']' + @EOL
+		SET @AiTriggerSql = @AiTriggerSql + 'INSERT ['+@SchemaName+'].[' + @HistoryTableName + ']' + @EOL
 		
 		SET @AiTriggerSql = @AiTriggerSql + @TAB + '('+@HistoryTableSystemColumnPrefix+'Operation, ' + @ColumnsList + ')'+ @EOL
 		SET @AiTriggerSql = @AiTriggerSql + 'SELECT ''I''' + ', i.*' + @EOL
@@ -293,7 +293,7 @@ BEGIN
 		SET @AuTriggerSql = @AuTriggerSql + 'CREATE TRIGGER ['+@SchemaName+'].[' + @UpdateTriggerName + '] ON ['+@SchemaName+'].[' + @TableName + '] AFTER UPDATE' + @EOL
 		SET @AuTriggerSql = @AuTriggerSql + 'AS' + @EOL 
 		SET @AuTriggerSql = @AuTriggerSql + 'SET NOCOUNT ON;' + @EOL
-		SET @AuTriggerSql = @AuTriggerSql + 'INSERT [dbo].[' + @HistoryTableName + ']' + @EOL
+		SET @AuTriggerSql = @AuTriggerSql + 'INSERT ['+@SchemaName+'].[' + @HistoryTableName + ']' + @EOL
 		SET @AuTriggerSql = @AuTriggerSql + @TAB + '('+@HistoryTableSystemColumnPrefix+'Operation, ' + @ColumnsList + ')'+ @EOL
 		SET @AuTriggerSql = @AuTriggerSql + 'SELECT ''U'''  + ', i.*' + @EOL
 		SET @AuTriggerSql = @AuTriggerSql + 'FROM inserted AS i' + @EOL
