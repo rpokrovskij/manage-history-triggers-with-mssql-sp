@@ -25,33 +25,27 @@ SOFTWARE.
 /*
 -- Test
 
-DROP TABLE Test
-DROP TABLE Test_History
-IF EXISTS(SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'Test_HistorySeq') AND type = 'SO')
-	DROP SEQUENCE Test_HistorySeq
-CREATE TABLE [dbo].[Test](
+CREATE TABLE [dbo].[ManageHistoryTriggersTestTable](
 	[TestId] [int] IDENTITY(1000,1) NOT NULL,
 	[TestValue] [nvarchar](100) NOT NULL,
 	[TestRowVersion] [timestamp] NOT NULL,
     PRIMARY KEY CLUSTERED ([TestId] ASC) ON [PRIMARY]
 ) ON [PRIMARY]
 GO
-exec [dbo].[ManageHistoryTriggers] 'Test', 'dbo', @PrintOnly=0, @CreateTriggers=1, @CreatePrimaryKey=1, @UseDateTime2=0
+exec [dbo].[ManageHistoryTriggers] 'ManageHistoryTriggersTestTable', 'dbo', @PrintOnly=0, @CreateTriggers=1, @CreatePrimaryKey=1, @UseDateTime2=0
 
-INSERT INTO dbo.Test (TestValue) VALUES('A001')
-INSERT INTO dbo.Test (TestValue) VALUES('A002'),('A003')
-UPDATE dbo.Test  SET TestValue = 'B001' WHERE TestValue= 'A001'
-UPDATE dbo.Test  SET TestValue = 'C001' WHERE TestValue= 'B001'
-DELETE FROM dbo.Test  
-SELECT * FROM Test_History
+INSERT INTO dbo.ManageHistoryTriggersTestTable (TestValue) VALUES('A001')
+INSERT INTO dbo.ManageHistoryTriggersTestTable (TestValue) VALUES('A002'),('A003')
+UPDATE dbo.ManageHistoryTriggersTestTable  SET TestValue = 'B001' WHERE TestValue= 'A001'
+UPDATE dbo.ManageHistoryTriggersTestTable  SET TestValue = 'C001' WHERE TestValue= 'B001'
+DELETE FROM dbo.ManageHistoryTriggersTestTable  
+SELECT * FROM dbo.ManageHistoryTriggersTestTable_History
 
-exec [dbo].[ManageHistoryTriggers] @TableName='Test', @SchemaName='dbo', @RemoveHistory=1
+exec [dbo].[ManageHistoryTriggers] @TableName='ManageHistoryTriggersTestTable', @SchemaName='dbo', @RemoveHistory=1, @ArchiveRemovedData=1
+exec [dbo].[ManageHistoryTriggers] 'ManageHistoryTriggersTestTable', 'dbo', @PrintOnly=0, @CreateTriggers=1, @CreatePrimaryKey=1, @UseDateTime2=0
+exec [dbo].[ManageHistoryTriggers] @TableName='ManageHistoryTriggersTestTable', @SchemaName='dbo',  @PrintOnly=1, @RemoveHistory=1, @ArchiveRemovedData=0
 
-TODO
-DROP TRIGGER [historyTrg_U_ElectrodeRemelts] --ON dbo.ElectrodeRemelts
-DROP TRIGGER  [historyTrg_D_ElectrodeRemelts] --ON dbo.ElectrodeRemelts
-exec sp_rename 'ElectrodeRemelts_History' , 'ElectrodeRemelts_History_20150920_1'   
-
+DROP TABLE ManageHistoryTriggersTestTable
 */
 
 ALTER PROCEDURE [dbo].[ManageHistoryTriggers]
@@ -61,13 +55,14 @@ ALTER PROCEDURE [dbo].[ManageHistoryTriggers]
 @CreateTriggers BIT = 1, 
 @CreatePrimaryKey BIT = 0,
 @UseDateTime2 BIT = 1,
-@RemoveHistory BIT = 0
+@RemoveHistory BIT = 0,
+@ArchiveRemovedData BIT = 1
 AS 
 
 DECLARE 
 	@HistorySchemaTableName sysname, @SchemaTableName sysname,
 	@HistorySequenceName sysname, @HistoryTableName sysname, @HistoryTableIdentityName sysname, @TriggerPrefix sysname, @HistoryTableSystemColumnPrefix sysname,
-	@InsertTriggerName sysname, @UpdateTriggerName sysname, @DeleteTriggerName sysname
+	@InsertTriggerName sysname, @UpdateTriggerName sysname, @DeleteTriggerName sysname, @ConstraintDefaultName sysname, @PrimaryKeyDefaultName sysname
 DECLARE
 	 @Comment VARCHAR(MAX), @TableSql VARCHAR(MAX)='', @AiTriggerSql VARCHAR(MAX), @AuTriggerSql VARCHAR(MAX), @AdTriggerSql VARCHAR(MAX)
 DECLARE
@@ -78,7 +73,7 @@ DECLARE
 SET @SchemaTableName ='['+@SchemaName+'].['+@TableName+']'
 SET @HistoryTableName         =@TableName+'_History' 
 SET @HistorySchemaTableName   ='['+@SchemaName+'].['+@HistoryTableName+']'
-SET @HistoryTableIdentityName ='HistoryId' --@TableName+'_HistoryId'
+SET @HistoryTableIdentityName ='HistoryId'
 SET @HistorySequenceName      =@TableName+'_HistorySeq'
 SET @TriggerPrefix            ='TRG_HISTORY'
 SET @HistoryTableSystemColumnPrefix = 'History'
@@ -87,6 +82,9 @@ SET @Comment = '-- Auto generated using ' + OBJECT_NAME(@@PROCID)+ ' by ' + SUSE
 SET @InsertTriggerName = @TriggerPrefix+'_AI_' + @TableName
 SET @UpdateTriggerName = @TriggerPrefix+'_AU_' + @TableName
 SET @DeleteTriggerName = @TriggerPrefix+'_AD_' + @TableName
+
+SET @ConstraintDefaultName = '[DF_'+@SchemaName+'.'+@HistorySequenceName+']'
+SET @PrimaryKeyDefaultName = '[PK_'+@SchemaName+'.'+@HistoryTableName+']'
 
 IF OBJECT_ID(@SchemaTableName, 'U') IS NULL 
 BEGIN
@@ -97,16 +95,75 @@ END
 
 IF @RemoveHistory=1
 BEGIN
+	DECLARE @RemoveInsertTriggerSql VARCHAR(MAX), @RemoveDeleteTriggerSql VARCHAR(MAX), @RemoveUpdateTriggerSql VARCHAR(MAX)
+	DECLARE @RemovePrimaryKey VARCHAR(MAX), @RemoveConstraint VARCHAR(MAX), @RenameTable VARCHAR(MAX), @RemoveTables VARCHAR(MAX)
 	IF  EXISTS (SELECT * FROM sys.triggers WHERE object_id = OBJECT_ID(N'['+@SchemaName+'].[' + @InsertTriggerName + ']'))
-		EXEC('DROP TRIGGER ['+@SchemaName+'].[' + @InsertTriggerName + ']')
+		SET @RemoveInsertTriggerSql='DROP TRIGGER ['+@SchemaName+'].[' + @InsertTriggerName + ']'+@EOL
 	IF  EXISTS (SELECT * FROM sys.triggers WHERE object_id = OBJECT_ID(N'['+@SchemaName+'].[' + @UpdateTriggerName + ']'))
-		EXEC('DROP TRIGGER ['+@SchemaName+'].[' + @UpdateTriggerName + ']')
+		SET @RemoveUpdateTriggerSql='DROP TRIGGER ['+@SchemaName+'].[' + @UpdateTriggerName + ']'+@EOL
 	IF  EXISTS (SELECT * FROM sys.triggers WHERE object_id = OBJECT_ID(N'['+@SchemaName+'].[' + @DeleteTriggerName + ']'))
-		EXEC('DROP TRIGGER ['+@SchemaName+'].[' + @DeleteTriggerName + ']')
+		SET @RemoveDeleteTriggerSql='DROP TRIGGER ['+@SchemaName+'].[' + @DeleteTriggerName + ']'+@EOL
+	
+	DECLARE @IsHistoryTableExists BIT=0
 	IF EXISTS(SELECT * FROM sys.tables WHERE  object_id = OBJECT_ID(N'['+@SchemaName+'].[' + @HistoryTableName + ']'))
+		SET @IsHistoryTableExists= 1
+
+	IF  @ArchiveRemovedData=0
 	BEGIN
-        DECLARE @NewHistoryTableName sysname = @HistoryTableName+'Till'+FORMAT(getdate(), N'yyyymmddThhMM') -- strictly without schema because of sp_rename specific
-		exec sp_rename @HistorySchemaTableName , @NewHistoryTableName
+		SET @RemoveTables = 'EXEC sp_MSforeachtable '''+ 'IF PARSENAME("?",2)='''''+@SchemaName+''''' AND PARSENAME("?",1) like '''''+@HistoryTableName+'%'''' DROP TABLE ?' +''''+@EOL
+	END
+	ELSE
+	BEGIN
+		IF @IsHistoryTableExists=1
+		BEGIN
+			IF EXISTS (SELECT * FROM sys.objects WHERE  [object_id]= OBJECT_ID(@ConstraintDefaultName) AND [type]='D')
+				SET @RemoveConstraint = 'ALTER TABLE ' + @HistorySchemaTableName + 'DROP CONSTRAINT ' + @ConstraintDefaultName+@EOL
+
+			IF EXISTS (SELECT * FROM sys.objects WHERE  [object_id]= OBJECT_ID(@PrimaryKeyDefaultName) AND [type]='PK')
+				SET @RemovePrimaryKey = 'ALTER TABLE ' + @HistorySchemaTableName + 'DROP CONSTRAINT ' + @PrimaryKeyDefaultName+@EOL
+			
+			DECLARE @NewHistoryTableName sysname = @HistoryTableName+'Till'+FORMAT(getdate(), N'yyyymmddThhMM') -- strictly without schema because of sp_rename specific
+			SET @RenameTable = 'EXEC sp_rename '''+@HistorySchemaTableName+''' , '''+@NewHistoryTableName+''''+@EOL
+		END
+	END
+
+	IF (@PrintOnly=1)
+	BEGIN
+		PRINT @RemoveInsertTriggerSql+@BOL
+		PRINT @RemoveUpdateTriggerSql+@BOL
+		PRINT @RemoveDeleteTriggerSql+@BOL
+		IF (@ArchiveRemovedData=1)
+		BEGIN
+			IF(@IsHistoryTableExists=1)
+			BEGIN
+				PRINT @RemoveConstraint+@BOL
+				PRINT @RemovePrimaryKey+@BOL
+				PRINT @RenameTable+@BOL
+			END
+		END
+		ELSE
+		BEGIN
+			PRINT @RemoveTables+@BOL
+		END
+	END
+	ELSE
+	BEGIN
+		EXEC(@RemoveInsertTriggerSql)
+		EXEC(@RemoveUpdateTriggerSql)
+		EXEC(@RemoveDeleteTriggerSql)
+		IF (@ArchiveRemovedData=1)
+		BEGIN
+			IF(@IsHistoryTableExists=1)
+			BEGIN
+				EXEC(@RemoveConstraint)
+				EXEC(@RemovePrimaryKey)
+				EXEC(@RenameTable)
+			END
+		END
+		ELSE
+		BEGIN
+			EXEC(@RemoveTables)
+		END
 	END
 END 
 ELSE
@@ -153,7 +210,7 @@ BEGIN
 			SET @TableSql = @Comment + @EOL + 'CREATE TABLE ['+@SchemaName+'].[' + @HistoryTableName + '] (' + @EOL
 			IF @CreatePrimaryKey=1
 			BEGIN
-				SET @TableSql = @TableSql + @TAB + '['+@HistoryTableIdentityName + '] [BIGINT]  DEFAULT NEXT VALUE FOR ['+@SchemaName+'].[' + @HistorySequenceName + '] NOT NULL,' + @EOL
+				SET @TableSql = @TableSql + @TAB + '['+@HistoryTableIdentityName + '] [BIGINT] CONSTRAINT ' + @ConstraintDefaultName + ' DEFAULT NEXT VALUE FOR ['+@SchemaName+'].[' + @HistorySequenceName + '] NOT NULL,' + @EOL
 			END
 			IF @UseDateTime2=1
 				SET @TableSql = @TableSql + @TAB + '['+@HistoryTableSystemColumnPrefix+'RecordedAt]' + @TAB + 'DATETIME2 NOT NULL DEFAULT (SYSDATETIME()),' + @EOL
@@ -200,7 +257,7 @@ BEGIN
 	IF @CreatePrimaryKey=1
 	BEGIN
 		SET @TableSql = @TableSql + 'ALTER TABLE ['+@SchemaName+'].[' + @HistoryTableName + ']' + @EOL
-		SET @TableSql = @TableSql + @TAB + 'ADD CONSTRAINT [PK_'+@SchemaName+'.'+@HistoryTableName + '] PRIMARY KEY CLUSTERED ([' + @HistoryTableIdentityName + '] ASC)' + @EOL
+		SET @TableSql = @TableSql + @TAB + 'ADD CONSTRAINT ' + @PrimaryKeyDefaultName + ' PRIMARY KEY CLUSTERED ([' + @HistoryTableIdentityName + '] ASC)' + @EOL
 		SET @TableSql = @TableSql + @TAB
 			+ 'WITH (ALLOW_PAGE_LOCKS = ON, ALLOW_ROW_LOCKS = ON, PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF, STATISTICS_NORECOMPUTE = OFF) ON [PRIMARY];' + @EOL
 			+ @EOL
