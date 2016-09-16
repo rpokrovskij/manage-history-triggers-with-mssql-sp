@@ -22,15 +22,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 */
-/*
--- Test
+/* Test
 
 CREATE TABLE [dbo].[ManageHistoryTriggersTestTable](
 	[TestId] [int] IDENTITY(1000,1) NOT NULL,
 	[TestValue] [nvarchar](100) NOT NULL,
 	[TestRowVersion] [timestamp] NOT NULL,
-    PRIMARY KEY CLUSTERED ([TestId] ASC) ON [PRIMARY]
-) ON [PRIMARY]
+        PRIMARY KEY CLUSTERED ([TestId] ASC)
+)
 GO
 exec [dbo].[ManageHistoryTriggers] 'ManageHistoryTriggersTestTable', 'dbo', @PrintOnly=0, @CreateTriggers=1, @CreatePrimaryKey=1, @UseDateTime2=0
 
@@ -49,14 +48,14 @@ DROP TABLE ManageHistoryTriggersTestTable
 */
 
 CREATE PROCEDURE [dbo].[ManageHistoryTriggers]
-@TableName VARCHAR(200),
-@SchemaName VARCHAR(200) = 'dbo',
-@PrintOnly BIT=0,
-@CreateTriggers BIT = 1, 
-@CreatePrimaryKey BIT = 0,
-@UseDateTime2 BIT = 1,
-@RemoveHistory BIT = 0,
-@ArchiveRemovedData BIT = 1
+	@TableName VARCHAR(200),
+	@SchemaName VARCHAR(200) = 'dbo',
+	@PrintOnly BIT=0,
+	@CreateTriggers BIT = 1, 
+	@CreatePrimaryKey BIT = 1,
+	@UseDateTime2 BIT = 0,
+	@RemoveHistory BIT = 0,
+	@ArchiveRemovedData BIT = 1
 AS 
 
 DECLARE 
@@ -243,7 +242,7 @@ BEGIN
 			SET @TableSql = @TableSql + '(' + CAST(@ColumnPrecision as sysname) + ', ' + CAST(@ColumnScale as sysname) + ')'
 		END
 	
-		SET @TableSql = @TableSql + ' NULL' -- I have no ideas why history rows could be set up not nullable
+		SET @TableSql = @TableSql + ' NULL' 
 		SET @TableSql = @TableSql + ',' + @EOL
 	
 		FETCH NEXT FROM CurHistoryTable INTO @ColumnName, @ColumnTypeName, @ColumnMaxLength, @ColumnPrecision, @ColumnScale, @ColumnIsNullable
@@ -252,7 +251,7 @@ BEGIN
 	CLOSE CurHistoryTable
 	DEALLOCATE CurHistoryTable
 	
-	-- finish history table script and code for Primary key
+	-- finish history table script with code for Primary key
 	SET @TableSql = @TableSql + ' )' + @EOL 
 	IF @CreatePrimaryKey=1
 	BEGIN
