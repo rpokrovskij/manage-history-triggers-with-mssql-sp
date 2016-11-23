@@ -234,7 +234,7 @@ BEGIN
 		BEGIN
 			IF @ColumnMaxLength = -1 
 				SET @TableSql = @TableSql + '(MAX)'
-			ELSE IF UPPER(@ColumnTypeName) in ('NCHAR', 'NVARCHAR',)
+			ELSE IF UPPER(@ColumnTypeName) in ('NCHAR', 'NVARCHAR')
 				SET @TableSql = @TableSql + '(' + CAST(@ColumnMaxLength/2 as sysname) + ')'
 			ELSE
 				SET @TableSql = @TableSql + '(' + CAST(@ColumnMaxLength as sysname) + ')'
