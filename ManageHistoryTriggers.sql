@@ -113,14 +113,23 @@ BEGIN
 	END
 	ELSE
 	BEGIN
+		IF EXISTS (SELECT * FROM sys.objects where name = PARSENAME(@ConstraintDefaultName,1)  and schema_id= SCHEMA_ID(@SchemaName) AND [type]='D' )
+		BEGIN
+			 DECLARE @ConstraintParentObjectId int 
+			 SELECT @ConstraintParentObjectId = parent_object_id FROM sys.objects where name = PARSENAME(@ConstraintDefaultName,1) and schema_id= SCHEMA_ID(@SchemaName) AND [type]='D' 
+			 IF (@ConstraintParentObjectId=object_id(@HistorySchemaTableName))
+				SET @RemoveConstraint = 'ALTER TABLE ' + @HistorySchemaTableName + ' DROP CONSTRAINT ' + @ConstraintDefaultName+@EOL
+		END
+		IF EXISTS (SELECT * FROM sys.objects WHERE name =PARSENAME(@PrimaryKeyDefaultName,1)  and schema_id= SCHEMA_ID(@SchemaName) AND [type]='PK')
+		BEGIN
+			 DECLARE @PrimaryKeyParentObjectId int 
+			 SELECT @PrimaryKeyParentObjectId = parent_object_id FROM sys.objects where name = PARSENAME(@PrimaryKeyDefaultName,1) and schema_id= SCHEMA_ID(@SchemaName) AND [type]='PK' 
+			 IF (@PrimaryKeyParentObjectId=object_id(@HistorySchemaTableName))
+				SET @RemovePrimaryKey = 'ALTER TABLE ' + @HistorySchemaTableName + ' DROP CONSTRAINT ' + @PrimaryKeyDefaultName+@EOL
+		END
+
 		IF @IsHistoryTableExists=1
 		BEGIN
-			IF EXISTS (SELECT * FROM sys.objects WHERE  [object_id]= OBJECT_ID(@ConstraintDefaultName) AND [type]='D')
-				SET @RemoveConstraint = 'ALTER TABLE ' + @HistorySchemaTableName + 'DROP CONSTRAINT ' + @ConstraintDefaultName+@EOL
-
-			IF EXISTS (SELECT * FROM sys.objects WHERE  [object_id]= OBJECT_ID(@PrimaryKeyDefaultName) AND [type]='PK')
-				SET @RemovePrimaryKey = 'ALTER TABLE ' + @HistorySchemaTableName + 'DROP CONSTRAINT ' + @PrimaryKeyDefaultName+@EOL
-			
 			DECLARE @NewHistoryTableName sysname = @HistoryTableName+'Till'+FORMAT(getdate(), N'yyyymmddThhMM') -- strictly without schema because of sp_rename specific
 			SET @RenameTable = 'EXEC sp_rename '''+@HistorySchemaTableName+''' , '''+@NewHistoryTableName+''''+@EOL
 		END
@@ -133,10 +142,13 @@ BEGIN
 		PRINT @RemoveDeleteTriggerSql+@BOL
 		IF (@ArchiveRemovedData=1)
 		BEGIN
+			IF(@RemoveConstraint IS NOT NULL)
+				PRINT @RemoveConstraint+@BOL
+			IF(@RemovePrimaryKey IS NOT NULL)
+				PRINT @RemovePrimaryKey+@BOL
+
 			IF(@IsHistoryTableExists=1)
 			BEGIN
-				PRINT @RemoveConstraint+@BOL
-				PRINT @RemovePrimaryKey+@BOL
 				PRINT @RenameTable+@BOL
 			END
 		END
@@ -152,10 +164,13 @@ BEGIN
 		EXEC(@RemoveDeleteTriggerSql)
 		IF (@ArchiveRemovedData=1)
 		BEGIN
+			IF(@RemoveConstraint IS NOT NULL)
+				EXEC(@RemoveConstraint)
+			IF(@RemovePrimaryKey IS NOT NULL)
+				EXEC(@RemovePrimaryKey)
+
 			IF(@IsHistoryTableExists=1)
 			BEGIN
-				EXEC(@RemoveConstraint)
-				EXEC(@RemovePrimaryKey)
 				EXEC(@RenameTable)
 			END
 		END
