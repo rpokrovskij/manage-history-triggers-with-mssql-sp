@@ -55,7 +55,8 @@ CREATE PROCEDURE [dbo].[ManageHistoryTriggers]
 	@CreatePrimaryKey BIT = 1,
 	@UseDateTime2 BIT = 0,
 	@RemoveHistory BIT = 0,
-	@ArchiveRemovedData BIT = 1
+	@ArchiveRemovedData BIT = 1,
+	@TriggersOnly BIT = 0
 AS 
 
 DECLARE 
@@ -103,35 +104,38 @@ BEGIN
 	IF  EXISTS (SELECT * FROM sys.triggers WHERE object_id = OBJECT_ID(N'['+@SchemaName+'].[' + @DeleteTriggerName + ']'))
 		SET @RemoveDeleteTriggerSql='DROP TRIGGER ['+@SchemaName+'].[' + @DeleteTriggerName + ']'+@EOL
 	
-	DECLARE @IsHistoryTableExists BIT=0
-	IF EXISTS(SELECT * FROM sys.tables WHERE  object_id = OBJECT_ID(N'['+@SchemaName+'].[' + @HistoryTableName + ']'))
-		SET @IsHistoryTableExists= 1
-
-	IF  @ArchiveRemovedData=0
+	IF @TriggersOnly=0
 	BEGIN
-		SET @RemoveTables = 'EXEC sp_MSforeachtable '''+ 'IF PARSENAME("?",2)='''''+@SchemaName+''''' AND PARSENAME("?",1) like '''''+@HistoryTableName+'%'''' DROP TABLE ?' +''''+@EOL
-	END
-	ELSE
-	BEGIN
-		IF EXISTS (SELECT * FROM sys.objects where name = PARSENAME(@ConstraintDefaultName,1)  and schema_id= SCHEMA_ID(@SchemaName) AND [type]='D' )
-		BEGIN
-			 DECLARE @ConstraintParentObjectId int 
-			 SELECT @ConstraintParentObjectId = parent_object_id FROM sys.objects where name = PARSENAME(@ConstraintDefaultName,1) and schema_id= SCHEMA_ID(@SchemaName) AND [type]='D' 
-			 IF (@ConstraintParentObjectId=object_id(@HistorySchemaTableName))
-				SET @RemoveConstraint = 'ALTER TABLE ' + @HistorySchemaTableName + ' DROP CONSTRAINT ' + @ConstraintDefaultName+@EOL
-		END
-		IF EXISTS (SELECT * FROM sys.objects WHERE name =PARSENAME(@PrimaryKeyDefaultName,1)  and schema_id= SCHEMA_ID(@SchemaName) AND [type]='PK')
-		BEGIN
-			 DECLARE @PrimaryKeyParentObjectId int 
-			 SELECT @PrimaryKeyParentObjectId = parent_object_id FROM sys.objects where name = PARSENAME(@PrimaryKeyDefaultName,1) and schema_id= SCHEMA_ID(@SchemaName) AND [type]='PK' 
-			 IF (@PrimaryKeyParentObjectId=object_id(@HistorySchemaTableName))
-				SET @RemovePrimaryKey = 'ALTER TABLE ' + @HistorySchemaTableName + ' DROP CONSTRAINT ' + @PrimaryKeyDefaultName+@EOL
-		END
+		DECLARE @IsHistoryTableExists BIT=0
+		IF EXISTS(SELECT * FROM sys.tables WHERE  object_id = OBJECT_ID(N'['+@SchemaName+'].[' + @HistoryTableName + ']'))
+			SET @IsHistoryTableExists= 1
 
-		IF @IsHistoryTableExists=1
+		IF  @ArchiveRemovedData=0
 		BEGIN
-			DECLARE @NewHistoryTableName sysname = @HistoryTableName+'Till'+FORMAT(getdate(), N'yyyymmddThhMM') -- strictly without schema because of sp_rename specific
-			SET @RenameTable = 'EXEC sp_rename '''+@HistorySchemaTableName+''' , '''+@NewHistoryTableName+''''+@EOL
+			SET @RemoveTables = 'EXEC sp_MSforeachtable '''+ 'IF PARSENAME("?",2)='''''+@SchemaName+''''' AND PARSENAME("?",1) like '''''+@HistoryTableName+'%'''' DROP TABLE ?' +''''+@EOL
+		END
+		ELSE
+		BEGIN
+			IF EXISTS (SELECT * FROM sys.objects where name = PARSENAME(@ConstraintDefaultName,1)  and schema_id= SCHEMA_ID(@SchemaName) AND [type]='D' )
+			BEGIN
+				 DECLARE @ConstraintParentObjectId int 
+				 SELECT @ConstraintParentObjectId = parent_object_id FROM sys.objects where name = PARSENAME(@ConstraintDefaultName,1) and schema_id= SCHEMA_ID(@SchemaName) AND [type]='D' 
+				 IF (@ConstraintParentObjectId=object_id(@HistorySchemaTableName))
+					SET @RemoveConstraint = 'ALTER TABLE ' + @HistorySchemaTableName + ' DROP CONSTRAINT ' + @ConstraintDefaultName+@EOL
+			END
+			IF EXISTS (SELECT * FROM sys.objects WHERE name =PARSENAME(@PrimaryKeyDefaultName,1)  and schema_id= SCHEMA_ID(@SchemaName) AND [type]='PK')
+			BEGIN
+				 DECLARE @PrimaryKeyParentObjectId int 
+				 SELECT @PrimaryKeyParentObjectId = parent_object_id FROM sys.objects where name = PARSENAME(@PrimaryKeyDefaultName,1) and schema_id= SCHEMA_ID(@SchemaName) AND [type]='PK' 
+				 IF (@PrimaryKeyParentObjectId=object_id(@HistorySchemaTableName))
+					SET @RemovePrimaryKey = 'ALTER TABLE ' + @HistorySchemaTableName + ' DROP CONSTRAINT ' + @PrimaryKeyDefaultName+@EOL
+			END
+
+			IF @IsHistoryTableExists=1
+			BEGIN
+				DECLARE @NewHistoryTableName sysname = @HistoryTableName+'Till'+FORMAT(getdate(), N'yyyymmddThhMM') -- strictly without schema because of sp_rename specific
+				SET @RenameTable = 'EXEC sp_rename '''+@HistorySchemaTableName+''' , '''+@NewHistoryTableName+''''+@EOL
+			END
 		END
 	END
 
@@ -140,21 +144,24 @@ BEGIN
 		PRINT @RemoveInsertTriggerSql+@BOL
 		PRINT @RemoveUpdateTriggerSql+@BOL
 		PRINT @RemoveDeleteTriggerSql+@BOL
-		IF (@ArchiveRemovedData=1)
+		IF (@TriggersOnly=0)		
 		BEGIN
-			IF(@RemoveConstraint IS NOT NULL)
-				PRINT @RemoveConstraint+@BOL
-			IF(@RemovePrimaryKey IS NOT NULL)
-				PRINT @RemovePrimaryKey+@BOL
-
-			IF(@IsHistoryTableExists=1)
+			IF (@ArchiveRemovedData=1)
 			BEGIN
-				PRINT @RenameTable+@BOL
+				IF(@RemoveConstraint IS NOT NULL)
+					PRINT @RemoveConstraint+@BOL
+				IF(@RemovePrimaryKey IS NOT NULL)
+					PRINT @RemovePrimaryKey+@BOL
+
+				IF(@IsHistoryTableExists=1)
+				BEGIN
+					PRINT @RenameTable+@BOL
+				END
 			END
-		END
-		ELSE
-		BEGIN
-			PRINT @RemoveTables+@BOL
+			ELSE
+			BEGIN
+				PRINT @RemoveTables+@BOL
+			END
 		END
 	END
 	ELSE
@@ -162,21 +169,24 @@ BEGIN
 		EXEC(@RemoveInsertTriggerSql)
 		EXEC(@RemoveUpdateTriggerSql)
 		EXEC(@RemoveDeleteTriggerSql)
-		IF (@ArchiveRemovedData=1)
+		IF (@TriggersOnly=0)		
 		BEGIN
-			IF(@RemoveConstraint IS NOT NULL)
-				EXEC(@RemoveConstraint)
-			IF(@RemovePrimaryKey IS NOT NULL)
-				EXEC(@RemovePrimaryKey)
-
-			IF(@IsHistoryTableExists=1)
+			IF (@ArchiveRemovedData=1)
 			BEGIN
-				EXEC(@RenameTable)
+				IF(@RemoveConstraint IS NOT NULL)
+					EXEC(@RemoveConstraint)
+				IF(@RemovePrimaryKey IS NOT NULL)
+					EXEC(@RemovePrimaryKey)
+
+				IF(@IsHistoryTableExists=1)
+				BEGIN
+					EXEC(@RenameTable)
+				END
 			END
-		END
-		ELSE
-		BEGIN
-			EXEC(@RemoveTables)
+			ELSE
+			BEGIN
+				EXEC(@RemoveTables)
+			END
 		END
 	END
 END 
@@ -326,6 +336,9 @@ BEGIN
 	END
 	
 	--BEGIN TRY
+	IF (@TriggersOnly=0)		
+	BEGIN
+	
 	    IF @CreatePrimaryKey=1
 		BEGIN
 			IF @PrintOnly=1
@@ -338,27 +351,28 @@ BEGIN
 			PRINT @TableSql+@BOL
 		ELSE
 			EXEC(@TableSql)
-		
-		IF @CreateTriggers = 1
-		BEGIN
-		   
-		    IF @PrintOnly=1
-				PRINT @AiTriggerSql+@BOL
-			ELSE
-				EXEC(@AiTriggerSql)
+	END
+	IF @CreateTriggers = 1
+	BEGIN
+	   
+	    IF @PrintOnly=1
+			PRINT @AiTriggerSql+@BOL
+		ELSE
+			EXEC(@AiTriggerSql)
 	
-			IF @PrintOnly=1
-				PRINT @AuTriggerSql+@BOL
-			ELSE
-				EXEC(@AuTriggerSql)
-			
-			IF @PrintOnly=1
-				PRINT @AdTriggerSql+@BOL
-			ELSE
-				EXEC(@AdTriggerSql)
-		END
+		IF @PrintOnly=1
+			PRINT @AuTriggerSql+@BOL
+		ELSE
+			EXEC(@AuTriggerSql)
+		
+		IF @PrintOnly=1
+			PRINT @AdTriggerSql+@BOL
+		ELSE
+			EXEC(@AdTriggerSql)
+	END
 --END TRY
 --BEGIN CATCH
 --	;THROW 50000,'Error creating history table',1
 --END CATCH
 END
+GO
